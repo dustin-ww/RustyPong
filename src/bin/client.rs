@@ -1,10 +1,8 @@
-
 use futures_util::stream::StreamExt;
 use futures_util::SinkExt;
 use http::Uri;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader, stdin};
 use tokio_websockets::{ClientBuilder, Message};
-use tokio::io;
 
 #[tokio::main]
 async fn main() -> Result<(), tokio_websockets::Error> {
@@ -13,10 +11,30 @@ async fn main() -> Result<(), tokio_websockets::Error> {
             .connect()
             .await?;
 
-    let stdin = io::
+    let stdin = stdin();
     let mut stdin = BufReader::new(stdin).lines();
 
+    loop {
+        tokio::select! {
+            incoming = ws_stream.next() => {
+                match incoming {
+                    Some(Ok(msg)) => {
+                        if let Some(text) = msg.as_text() {
+                            println!("From server: {}", text);
+                        }
+                    },
+                    Some(Err(err)) => return Err(err.into()),
+                    None => return Ok(()),
+                }
+            }
+            res = stdin.next_line() => {
+                match res {
+                    Ok(None) => return Ok(()),
+                    Ok(Some(line)) => ws_stream.send(Message::text(line.to_string())).await?,
+                    Err(err) => return Err(err.into()),
+                }
+            }
 
-    // TODO: For a hint, see the description of the task below.
-
+        }
+    }
 }
