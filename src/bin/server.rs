@@ -1,37 +1,44 @@
+use futures_util::sink::SinkExt;
+use futures_util::stream::StreamExt;
 use std::error::Error;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
-use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast::{channel, Sender};
-use tokio_websockets::{ServerBuilder, WebSocketStream, Message};
-
+use tokio_websockets::{Message, ServerBuilder, WebSocketStream};
 
 async fn handle_connection(
     addr: SocketAddr,
     mut ws_stream: WebSocketStream<TcpStream>,
     bcast_tx: Sender<String>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let ws_stream = Arc::new(Mutex::new(ws_stream));
 
-    let mut bcast_subscriber = bcast_tx.subscribe();
-    // TODO: For a hint, see the description of the task below.
-    tokio::select! {
-        message = ws_stream.next() {
-            match message {
-                Some(Ok(msg_ok)) => {
-                    if let Some(text) = msg_ok.as_text() {
-                        println!("From client {}, text : {}", addr, text);
-                        bcast_tx.send(text.into())?;
+    ws_stream
+        .send(Message::text("Welcome to chat! Type a message".to_string()))
+        .await?;
+    let mut bcast_rx = bcast_tx.subscribe();
+
+    // A continuous loop for concurrently performing two tasks: (1) receiving
+    // messages from `ws_stream` and broadcasting them, and (2) receiving
+    // messages on `bcast_rx` and sending them to the client.
+    loop {
+        tokio::select! {
+            incoming = ws_stream.next() => {
+                match incoming {
+                    Some(Ok(msg)) => {
+                        if let Some(text) = msg.as_text() {
+                            println!("From client {addr:?} {text:?}");
+                            bcast_tx.send(text.into())?;
+                        }
                     }
+                    Some(Err(err)) => return Err(err.into()),
+                    None => return Ok(()),
                 }
             }
-        }
-        msg = bcast_subscriber.recv() => {
-            ws_stream.send(Message::text(msg))
+            msg = bcast_rx.recv() => {
+                ws_stream.send(Message::text(msg?)).await?;
+            }
         }
     }
-
 }
 
 #[tokio::main]
