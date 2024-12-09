@@ -231,7 +231,7 @@ fn draw(game_state: &mut GameState, dt: f32) {
 // {x} - implement ball movement
 // {x} - implement ball collisions (both with sticks and wall)
 // {x} - implement gameplay (also funktionen die bei gewissen collisionen aufgerufen werden z.B.)
-// {} - Show winner
+// {x} - Show winner
 // {} - test collisions
 // {} - bissi schön machen?
 
@@ -244,6 +244,33 @@ fn window_conf() -> Conf {
         ..Default::default()
     }
 }
+
+fn draw_winner(winner: Box<str>) {
+    let font_size_winner = 20.0;
+
+    let size_winner = measure_text(&*winner, None, font_size_winner as _, 1.0);
+
+    draw_text(
+        &*winner,
+        (screen_width() - size_winner.width) / 2.0,
+        screen_height() / 2.0,
+        font_size_winner,
+        WHITE,
+    );
+
+    let message = "Press [Escape] to exit";
+    let font_size_message = 20.0;
+    let size_message = measure_text(message, None, font_size_message as _, 1.0);
+
+    draw_text(
+        message,
+        (screen_width() - size_message.width) / 2.0,
+        screen_height() / 2.0 + 40.0,
+        font_size_message,
+        WHITE,
+    );
+}
+
 
 #[macroquad::main(window_conf)]
 async fn main() {
@@ -259,7 +286,7 @@ async fn main() {
         Vec2::new(870.0, screen_height() / 2.0 - stick_size.y / 2.0),
         stick_size,
         stick_movementspeed,
-    ); // Hard coding the position isn't too good either
+    );
 
     let ball = Ball::new(
         Vec2::new(
@@ -268,11 +295,13 @@ async fn main() {
         ),
         Vec2::ZERO,
         ball_radius,
-        200.0,
-    ); // Typesave: Cannot divide a f32 by an i32
+        600.0,
+    );
 
     let mut game_state = GameState::new(left_stick, right_stick, ball);
     game_state.ball.reset();
+
+    // Game loop
     while game_state.is_running {
         let delta_time = get_frame_time();
 
@@ -281,4 +310,24 @@ async fn main() {
 
         next_frame().await;
     }
+
+    // End screen loop
+    loop {
+        clear_background(BLACK);
+
+        if game_state.score_right == 5 {
+            draw_winner(Box::from("Right wins!"));
+        } else if game_state.score_left == 5 {
+            draw_winner(Box::from("Left wins!"));
+        }
+
+
+
+        if is_key_pressed(KeyCode::Escape) {
+            break;
+        }
+
+        next_frame().await;
+    }
 }
+
