@@ -15,9 +15,15 @@ async fn handle_connection(
     ws_stream
         .send(Message::text("Welcome to chat! Type a message".to_string()))
         .await?;
+
+    // Register new broadcast receiver
     let mut bcast_rx = bcast_tx.subscribe();
     loop {
+
+        // Enables parallel waiting for several asynchronous events (receiving, sending to broadcast)
         tokio::select! {
+
+            // receive messages from client
             incoming = ws_stream.next() => {
                 match incoming {
                     Some(Ok(msg)) => {
@@ -30,6 +36,7 @@ async fn handle_connection(
                     None => return Ok(()),
                 }
             }
+            // receive message from broadcast and send to client
             msg = bcast_rx.recv() => {
                 ws_stream.send(Message::text(msg?)).await?;
             }
@@ -39,11 +46,13 @@ async fn handle_connection(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+    // create tokio broadcast channel
     let (bcast_tx, _) = channel(16);
 
     let listener = TcpListener::bind("127.0.0.1:2000").await?;
     println!("listening on port 2000");
 
+    // loop to accept connections via web socket on port 2000
     loop {
         let (socket, addr) = listener.accept().await?;
         println!("New connection from {addr:?}");
